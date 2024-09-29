@@ -16,12 +16,14 @@ import mobi.omegacentauri.p2pexperiment.calibration.CameraCalibrator;
 
 import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -44,11 +46,19 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     double gravity[] = new double[3];
     private SensorManager sensorManager;
     private Sensor gravitySensor;
+    private MenuItem mItemVertical;
+    private SharedPreferences prefs;
+    private Boolean mVertical = false;
+    private static final String VERTICAL = "Vertical";
 
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+
+        prefs = PreferenceManager.getDefaultSharedPreferences(this);
+        mVertical = prefs.getBoolean(VERTICAL, false);
+
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
         sensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
@@ -112,7 +122,10 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         Log.i(TAG, "called onCreateOptionsMenu");
         mItemCalibration = menu.add("Calibration");
         mItemCalibration.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_ALWAYS);
-
+        mItemVertical = menu.add("Vertical mode");
+        mItemVertical.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_NEVER);
+        mItemVertical.setCheckable(true);
+        mItemVertical.setChecked(mVertical);
         return true;
     }
 
@@ -122,7 +135,13 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         if (item == mItemCalibration) {
             Intent i = new Intent(this, CameraCalibrationActivity.class);
             startActivity(i);
+        } else if (item == mItemVertical) {
+            mVertical = ! mVertical;
+            mItemCalibration.setChecked(mVertical);
+            prefs.edit().putBoolean(VERTICAL, mVertical).apply();;
+            return true;
         }
+
         return true;
     }
 
@@ -143,7 +162,7 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         else {
             renderedFrame = inputFrame.rgba();
         }
-        return mQRDetector.handleFrame(renderedFrame,mCameraMatrix,gravity);
+        return mQRDetector.handleFrame(renderedFrame,mCameraMatrix,gravity,mVertical);
     }
 
     @Override

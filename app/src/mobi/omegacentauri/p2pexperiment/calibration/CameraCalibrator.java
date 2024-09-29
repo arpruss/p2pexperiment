@@ -135,6 +135,8 @@ public class CameraCalibrator {
         Log.i(TAG, String.format("Average re-projection error: %f", mRms));
         Log.i(TAG, "Camera matrix: " + mCameraMatrix.dump());
         Log.i(TAG, "Distortion coefficients: " + mDistortionCoefficients.dump());
+
+
     }
 
     public void clearCorners() {

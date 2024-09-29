@@ -1,7 +1,5 @@
 package mobi.omegacentauri.p2pexperiment;
 
-import android.util.Log;
-
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
 import org.opencv.core.Point;
@@ -45,7 +43,8 @@ public class MarkerProcessor {
     }
 
     /* this method to be called from the outside. It processes the frame to find QR codes. */
-    public synchronized Mat handleFrame(Mat inputFrame, Mat cameraMatrix, double[] gravity) {
+    public synchronized Mat handleFrame(Mat inputFrame, Mat cameraMatrix, double[] gravity,
+                                        Boolean verticalMode) {
         List<Mat> corners = new ArrayList<Mat>();
         Mat ids = new Mat();
         boolean result = findQRs(inputFrame, corners, ids);
@@ -62,7 +61,7 @@ public class MarkerProcessor {
                         marker2 = corners.get(i);
                 }
                 if (marker1 != null && marker2 != null) {
-                    P2PExperiment experiment = new P2PExperiment(cameraMatrix, marker1, marker2, gravity);
+                    P2PExperiment experiment = new P2PExperiment(cameraMatrix, marker1, marker2, gravity, verticalMode);
                     List<List<Point>> out = experiment.getTestPositions();
                     for (List<Point> p : out)
                         for (int i = 0 ; i < 4 ; i++) {

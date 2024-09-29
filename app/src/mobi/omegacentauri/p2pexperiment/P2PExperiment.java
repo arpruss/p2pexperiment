@@ -15,6 +15,7 @@ public class P2PExperiment {
     private final Mat m2_mat;
     private final Mat m3_mat;
     private final Mat m4_mat;
+    private final Boolean mVertical;
     //    private final Mat mCameraMatrix;
     private double focalLength;
     private Point cameraCenter;
@@ -23,11 +24,11 @@ public class P2PExperiment {
     private static final double markerSize = 50;
     private static final double hSpacing = 150;
     private static final double vSpacing = 200;
-    private static final double[] m1 = new double[] { 0, 0, 0 };
-    private static final double[] m2 = new double[] { hSpacing, 0, 0 };
-    private static final double[] m3 = new double[] { 0, vSpacing, 0 };
-    private static final double[] m4 = new double[] { hSpacing, vSpacing, 0 };
-    private static final double d = Math.sqrt(Math.pow(m1[0]-m2[0],2)+Math.pow(m1[1]-m2[1],2));
+    private double[] m1 = new double[] { 0, 0, 0 };
+    private double[] m2 = new double[] { hSpacing, 0, 0 };
+    private double[] m3 = new double[] { 0, vSpacing, 0 };
+    private double[] m4 = new double[] { hSpacing, vSpacing, 0 };
+    private final double d;
     private Mat vertical;
     private double beta;
     private int atMarker;
@@ -37,8 +38,24 @@ public class P2PExperiment {
     private Mat cameraPosition;
     private Mat worldToCameraRotation;
 
-    P2PExperiment(Mat cameraMatrix, Mat marker1, Mat marker2, double[] gravity) {
-        Log.v("Aruco", "initializing 1");
+    P2PExperiment(Mat cameraMatrix, Mat marker1, Mat marker2, double[] gravity, Boolean verticalMode) {
+        mVertical = verticalMode;
+        
+        if (verticalMode) {
+            m1 = new double[]{0, 0, 0};
+            m2 = new double[]{hSpacing, 0, 0};
+            m3 = new double[]{0, 0, vSpacing};
+            m4 = new double[]{hSpacing, 0, vSpacing};
+        }
+        else {
+            m1 = new double[]{0, 0, 0};
+            m2 = new double[]{hSpacing, 0, 0};
+            m3 = new double[]{0, vSpacing, 0};
+            m4 = new double[]{hSpacing, vSpacing, 0};
+        }
+
+        d = Math.sqrt(Math.pow(m1[0]-m2[0],2)+Math.pow(m1[1]-m2[1],2));
+
         m1_mat = new Mat(3, 1,CvType.CV_64FC1);
         m1_mat.put(0,0,m1);
         Log.v("Aruco", "initializing 2");
@@ -260,10 +277,20 @@ public class P2PExperiment {
 
     private List<Point> markerWorldToCamera(double[] marker) {
         List<Point> out = new ArrayList<Point>();
-        out.add(worldToCamera(marker[0]-markerSize/2, marker[1]-markerSize/2, marker[2]));
-        out.add(worldToCamera(marker[0]+markerSize/2, marker[1]-markerSize/2, marker[2]));
-        out.add(worldToCamera(marker[0]+markerSize/2, marker[1]+markerSize/2, marker[2]));
-        out.add(worldToCamera(marker[0]-markerSize/2, marker[1]+markerSize/2, marker[2]));
+        double dx = markerSize/2;
+        double dy,dz;
+        if (mVertical) {
+            dy = 0;
+            dz = markerSize/2;
+        }
+        else {
+            dy = markerSize/2;
+            dz = 0;
+        }
+        out.add(worldToCamera(marker[0]-dx, marker[1]-dy, marker[2]-dz));
+        out.add(worldToCamera(marker[0]+dx, marker[1]-dy, marker[2]-dz));
+        out.add(worldToCamera(marker[0]+dx, marker[1]+dy, marker[2]+dz));
+        out.add(worldToCamera(marker[0]-dx, marker[1]+dy, marker[2]+dz));
 
         return out;
     }
