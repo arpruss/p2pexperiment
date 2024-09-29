@@ -98,11 +98,12 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         gravity[1] = 0;
         gravity[2] = 0;
         sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_FASTEST);
+        sensorManager.registerListener(this, gravitySensor, SensorManager.SENSOR_DELAY_FASTEST);
 
         if (mOpenCvCameraView != null) {
             mOpenCvCameraView.enableView();
         }
-        mCameraMatrix = new Mat(CalibrationResult.CAMERA_MATRIX_ROWS+1, CalibrationResult.CAMERA_MATRIX_COLS, CvType.CV_64FC1);
+        mCameraMatrix = new Mat(CalibrationResult.CAMERA_MATRIX_ROWS, CalibrationResult.CAMERA_MATRIX_COLS, CvType.CV_64FC1);
         mDistortionCoefficients = new Mat(CalibrationResult.DISTORTION_COEFFICIENTS_SIZE, 1, CvType.CV_64FC1);
     }
 
@@ -137,7 +138,7 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
             startActivity(i);
         } else if (item == mItemVertical) {
             mVertical = ! mVertical;
-            mItemCalibration.setChecked(mVertical);
+            mItemVertical.setChecked(mVertical);
             prefs.edit().putBoolean(VERTICAL, mVertical).apply();;
             return true;
         }
@@ -152,7 +153,6 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     }
 
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        Log.v("Aruco", "camera frame");
         CalibrationResult.tryLoad(this, mCameraMatrix, mDistortionCoefficients, (JavaCameraView)mOpenCvCameraView, inputFrame.rgba().size());
         Mat renderedFrame = new Mat();
         if (Core.countNonZero(mDistortionCoefficients) > 0) {

@@ -5,6 +5,7 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Point;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.ArucoDetector;
+import org.opencv.objdetect.DetectorParameters;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,6 +19,10 @@ public class MarkerProcessor {
 
     public MarkerProcessor(boolean useArucoDetector) {
         detector = new ArucoDetector();
+        DetectorParameters par = detector.getDetectorParameters();
+        par.set_maxErroneousBitsInBorderRate(.1);
+        par.set_useAruco3Detection(true);
+        detector.setDetectorParameters(par);
     }
 
     private boolean findQRs(Mat inputFrame, List<Mat> corners, Mat ids) {
@@ -54,14 +59,20 @@ public class MarkerProcessor {
             if (cameraMatrix != null && ( gravity[0] != 0 || gravity[1] != 0 || gravity[2] != 0)) {
                 Mat marker1 = null;
                 Mat marker2 = null;
+                Mat marker3 = null;
+                Mat marker4 = null;
                 for (int i = 0; i < corners.size(); i++) {
                     if (ids.get(i, 0)[0] == 1)
                         marker1 = corners.get(i);
                     else if (ids.get(i, 0)[0] == 2)
                         marker2 = corners.get(i);
+                    else if (ids.get(i, 0)[0] == 3)
+                        marker3 = corners.get(i);
+                    else if (ids.get(i, 0)[0] == 4)
+                        marker4 = corners.get(i);
                 }
                 if (marker1 != null && marker2 != null) {
-                    P2PExperiment experiment = new P2PExperiment(cameraMatrix, marker1, marker2, gravity, verticalMode);
+                    P2PExperiment experiment = new P2PExperiment(cameraMatrix, marker1, marker2, marker3, marker4, gravity, verticalMode);
                     List<List<Point>> out = experiment.getTestPositions();
                     for (List<Point> p : out)
                         for (int i = 0 ; i < 4 ; i++) {

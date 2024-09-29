@@ -2,10 +2,15 @@ package mobi.omegacentauri.p2pexperiment;
 
 import android.util.Log;
 
+import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfDouble;
+import org.opencv.core.MatOfPoint2f;
+import org.opencv.core.MatOfPoint3f;
 import org.opencv.core.Point;
+import org.opencv.core.Point3;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -16,6 +21,10 @@ public class P2PExperiment {
     private final Mat m3_mat;
     private final Mat m4_mat;
     private final Boolean mVertical;
+    private final Mat mMarker1,mMarker2,mMarker3,mMarker4;
+    private Mat marker3CameraVector;
+    private Mat marker4CameraVector;
+    private final Mat mCameraMatrix;
     //    private final Mat mCameraMatrix;
     private double focalLength;
     private Point cameraCenter;
@@ -24,10 +33,7 @@ public class P2PExperiment {
     private static final double markerSize = 50;
     private static final double hSpacing = 150;
     private static final double vSpacing = 200;
-    private double[] m1 = new double[] { 0, 0, 0 };
-    private double[] m2 = new double[] { hSpacing, 0, 0 };
-    private double[] m3 = new double[] { 0, vSpacing, 0 };
-    private double[] m4 = new double[] { hSpacing, vSpacing, 0 };
+    private Point3 m1,m2,m3,m4;
     private final double d;
     private Mat vertical;
     private double beta;
@@ -38,33 +44,39 @@ public class P2PExperiment {
     private Mat cameraPosition;
     private Mat worldToCameraRotation;
 
-    P2PExperiment(Mat cameraMatrix, Mat marker1, Mat marker2, double[] gravity, Boolean verticalMode) {
+    private boolean p4p;
+
+    P2PExperiment(Mat cameraMatrix, Mat marker1, Mat marker2, Mat marker3, Mat marker4, double[] gravity, Boolean verticalMode) {
+        mCameraMatrix = cameraMatrix;
+
+        mMarker1 = marker1;
+        mMarker2 = marker2;
+        mMarker3 = marker3;
+        mMarker4 = marker4;
+
         mVertical = verticalMode;
         
         if (verticalMode) {
-            m1 = new double[]{0, 0, 0};
-            m2 = new double[]{hSpacing, 0, 0};
-            m3 = new double[]{0, 0, vSpacing};
-            m4 = new double[]{hSpacing, 0, vSpacing};
+            m1 = new Point3(0, 0, 0);
+            m2 = new Point3(hSpacing, 0, 0);
+            m3 = new Point3(0, 0, vSpacing);
+            m4 = new Point3(hSpacing, 0, vSpacing);
         }
         else {
-            m1 = new double[]{0, 0, 0};
-            m2 = new double[]{hSpacing, 0, 0};
-            m3 = new double[]{0, vSpacing, 0};
-            m4 = new double[]{hSpacing, vSpacing, 0};
+            m1 = new Point3(0, 0, 0);
+            m2 = new Point3(hSpacing, 0, 0);
+            m3 = new Point3(0, vSpacing, 0);
+            m4 = new Point3(hSpacing,vSpacing, 0);
         }
 
-        d = Math.sqrt(Math.pow(m1[0]-m2[0],2)+Math.pow(m1[1]-m2[1],2));
+        p4p = marker3 != null && marker4 != null;
 
-        m1_mat = new Mat(3, 1,CvType.CV_64FC1);
-        m1_mat.put(0,0,m1);
-        Log.v("Aruco", "initializing 2");
-        m2_mat = new Mat(3, 1,CvType.CV_64FC1);
-        m2_mat.put(0,0,m2);
-        m3_mat = new Mat(3, 1,CvType.CV_64FC1);
-        m3_mat.put(0,0,m3);
-        m4_mat = new Mat(3, 1,CvType.CV_64FC1);
-        m4_mat.put(0,0,m4);
+        d = Math.sqrt(Math.pow(m1.x-m2.x,2)+Math.pow(m1.y-m2.y,2));
+
+        m1_mat = toVector(m1);
+        m2_mat = toVector(m2);
+        m3_mat = toVector(m3);
+        m4_mat = toVector(m4);
 
         focalLength = (cameraMatrix.get(0,0)[0]+cameraMatrix.get(1,1)[0])/2;
         cameraCenter = new Point(cameraMatrix.get(0,2)[0],cameraMatrix.get(1,2)[0]);
@@ -81,8 +93,46 @@ public class P2PExperiment {
         computeSolution();
         computePosition();
         computeRotation();
+        if (p4p) {
+            marker3CameraVector = camera2DToVector(getQuadCenter(marker3));
+            marker4CameraVector = camera2DToVector(getQuadCenter(marker4));
+            p4pCheck();
+        }
     }
 
+    private static Mat toVector(Point3 a) {
+        Mat m = new Mat(3, 1,CvType.CV_64FC1);
+        m.put(0,0, a.x);
+        m.put(1,0, a.y);
+        m.put(2,0, a.z);
+        return m;
+    }
+
+    private static Point toPoint(Mat m) {
+        return new Point(m.get(0,0)[0], m.get(1,0)[0]);
+    }
+
+    private void p4pCheck() {
+        MatOfPoint3f objectPoints = new MatOfPoint3f(m1,m2,m3,m4);
+        MatOfPoint2f cameraPoints = new MatOfPoint2f(getQuadCenter(mMarker1),getQuadCenter(mMarker2),getQuadCenter(mMarker3),getQuadCenter(mMarker4));
+//        MatOfDouble rvec = new MatOfDouble();// new Mat(3,1,CvType.CV_64FC1);
+//        MatOfDouble tvec = new MatOfDouble();// Mat(3,1,CvType.CV_64FC1);
+        Mat rvec = new Mat();
+        Mat tvec = new Mat();
+        MatOfDouble distCoeffs = new MatOfDouble(); //0,0,0,0,0);
+        Calib3d.solvePnP(objectPoints,cameraPoints,mCameraMatrix,distCoeffs,rvec,tvec);
+//        tvec.put(0,0,-tvec.get(0,0)[0]);
+//        tvec.put(1,0,-tvec.get(1,0)[0]);
+        Mat rot = new Mat();
+        Calib3d.Rodrigues(rvec, rot);
+        Mat position = rot.inv().matMul(tvec);
+        double x = -position.get(0,0)[0];
+        double y = -position.get(1,0)[0];
+        double z = -position.get(2,0)[0];
+        Mat diff = new Mat();
+        Core.add(position,cameraPosition,diff);
+        Log.v("Aruco",  "error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
+    }
     private Mat rotationAboutAxis(Mat axis, double angle) {
         double c = Math.cos(angle);
         double nc = 1-c;
@@ -102,13 +152,10 @@ public class P2PExperiment {
     }
 
     private Mat rotationVectorPairToVectorPair(Mat in1, Mat in2, Mat out1, Mat out2) {
-        Log.v("Aruco", "pair to pair");
         Mat r11 = rotationVectorToVector(in1, out1);
         Mat in2r = r11.matMul(in2);
         double angle = angleAboutAxis(out1, in2r, out2);
         Mat r = rotationAboutAxis(out1, angle).matMul(r11);
-        Log.v("Aruco", "test "+out1.dump()+" -> "+r.matMul(in1).dump());
-        Log.v("Aruco", "test "+out2.dump()+" -> "+r.matMul(in2).dump());
         return r;
     }
 
@@ -125,9 +172,7 @@ public class P2PExperiment {
     private Mat rotationVectorToVector(Mat start, Mat end) {
         Mat normal = new Mat(3,1,CvType.CV_64FC1);
         Core.normalize(start.cross(end), normal);
-        Log.v("Aruco", "start "+start.dump()+" end "+end.dump()+" normal "+normal.dump());
         double angle = angleAboutAxis(normal, start, end);
-        Log.v("Aruco", "angle = "+angle);
         return rotationAboutAxis(normal, angle);
     }
 
@@ -143,19 +188,19 @@ public class P2PExperiment {
     }
 
     private void computePosition() {
-        double m2Angle = Math.atan2(m2[1]-m1[1],m2[0]-m1[0]);
+        double m2Angle = Math.atan2(m2.y-m1.y,m2.x-m1.x);
         double xOffset = (d*d-d2*d2+d1*d1)/(2*d);
         double yOffset = Math.sqrt(4*d*d*d1*d1-Math.pow(d*d-d2*d2+d1*d1,2))/(2*d);
         if (beta<0)
             yOffset = -yOffset;
-        double x = m1[0] + Math.cos(m2Angle)*xOffset - Math.sin(m2Angle)*yOffset;
-        double y = m1[1] + Math.sin(m2Angle)*xOffset + Math.cos(m2Angle)*yOffset;
-        double z = m1[2] + h1;
+        double x = m1.x + Math.cos(m2Angle)*xOffset - Math.sin(m2Angle)*yOffset;
+        double y = m1.y + Math.sin(m2Angle)*xOffset + Math.cos(m2Angle)*yOffset;
+        double z = m1.z + h1;
         cameraPosition = new Mat(3, 1, CvType.CV_64FC1);
         cameraPosition.put(0,0,x);
         cameraPosition.put(1,0,y);
         cameraPosition.put(2,0,z);
-        Log.v("Aruco", "position "+cameraPosition.dump());
+        Log.v("Aruco","p2p "+x+" "+y+" "+z);
     }
 
     private void computeSolution() {
@@ -164,12 +209,12 @@ public class P2PExperiment {
         if (i_is_1) {
             rho_i = rho1;
             rho_j = rho2;
-            delta = m2[2] - m1[2];
+            delta = m2.z - m1.z;
         }
         else {
             rho_i = rho2;
             rho_j = rho1;
-            delta = m1[2] - m2[2];
+            delta = m1.z - m2.z;
         }
         double cot_j = 1./Math.tan(rho_j);
         double tan_i = Math.tan(rho_i);
@@ -177,8 +222,7 @@ public class P2PExperiment {
         double cottan = cot_j * tan_i;
         double a = 1-2*cos_beta*cottan + cottan*cottan;
         double dj,di,hj,hi;
-        if (m2[2] == m1[2]) {
-            Log.v("Aruco", "rho_i "+rho_i+" rho_j "+rho_j);
+        if (m2.z == m1.z) {
             dj = d / Math.sqrt(a);
             di = dj * cot_j * tan_i;
             hj = -dj * cot_j;
@@ -275,7 +319,7 @@ public class P2PExperiment {
         return out;
     }
 
-    private List<Point> markerWorldToCamera(double[] marker) {
+    private List<Point> markerWorldToCamera(Point3 marker) {
         List<Point> out = new ArrayList<Point>();
         double dx = markerSize/2;
         double dy,dz;
@@ -287,10 +331,10 @@ public class P2PExperiment {
             dy = markerSize/2;
             dz = 0;
         }
-        out.add(worldToCamera(marker[0]-dx, marker[1]-dy, marker[2]-dz));
-        out.add(worldToCamera(marker[0]+dx, marker[1]-dy, marker[2]-dz));
-        out.add(worldToCamera(marker[0]+dx, marker[1]+dy, marker[2]+dz));
-        out.add(worldToCamera(marker[0]-dx, marker[1]+dy, marker[2]+dz));
+        out.add(worldToCamera(marker.x-dx, marker.y-dy, marker.z-dz));
+        out.add(worldToCamera(marker.x+dx, marker.y-dy, marker.z-dz));
+        out.add(worldToCamera(marker.x+dx, marker.y+dy, marker.z+dz));
+        out.add(worldToCamera(marker.x-dx, marker.y+dy, marker.z+dz));
 
         return out;
     }
