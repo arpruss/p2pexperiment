@@ -1,0 +1,1 @@
+This is based on the OpenCV SDK samples.
