@@ -1,14 +1,18 @@
 package mobi.omegacentauri.p2pexperiment;
 
+import mobi.omegacentauri.p2pexperiment.calibration.CalibrationResult;
+
 import org.opencv.android.CameraActivity;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.calib3d.Calib3d;
+import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.JavaCameraView;
 import mobi.omegacentauri.p2pexperiment.calibration.CalibrationResult;
 import mobi.omegacentauri.p2pexperiment.calibration.CameraCalibrationActivity;
+import mobi.omegacentauri.p2pexperiment.calibration.CameraCalibrator;
 
 import android.content.Context;
 import android.content.Intent;
@@ -36,7 +40,6 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     private MenuItem             mItemCalibration;
     private Mat mCameraMatrix;
     private Mat mDistortionCoefficients;
-    private boolean mCalibrated;
 
     double gravity[] = new double[3];
     private SensorManager sensorManager;
@@ -89,12 +92,8 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         if (mOpenCvCameraView != null) {
             mOpenCvCameraView.enableView();
         }
-        mCameraMatrix = new Mat();
-        mDistortionCoefficients = new Mat();
-        Mat.eye(3, 3, CvType.CV_64FC1).copyTo(mCameraMatrix);
-        mCameraMatrix.put(0, 0, 1.0);
-        Mat.zeros(5, 1, CvType.CV_64FC1).copyTo(mDistortionCoefficients);
-        mCalibrated = CalibrationResult.tryLoad(this, mCameraMatrix, mDistortionCoefficients);
+        mCameraMatrix = new Mat(CalibrationResult.CAMERA_MATRIX_ROWS+1, CalibrationResult.CAMERA_MATRIX_COLS, CvType.CV_64FC1);
+        mDistortionCoefficients = new Mat(CalibrationResult.DISTORTION_COEFFICIENTS_SIZE, 1, CvType.CV_64FC1);
     }
 
     @Override
@@ -134,15 +133,17 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     }
 
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        Log.v("Aruco", "camera frame");
+        CalibrationResult.tryLoad(this, mCameraMatrix, mDistortionCoefficients, (JavaCameraView)mOpenCvCameraView, inputFrame.rgba().size());
         Mat renderedFrame = new Mat();
-        if (mCalibrated) {
+        if (Core.countNonZero(mDistortionCoefficients) > 0) {
             Calib3d.undistort(inputFrame.rgba(), renderedFrame,
                     mCameraMatrix, mDistortionCoefficients);
         }
         else {
             renderedFrame = inputFrame.rgba();
         }
-        return mQRDetector.handleFrame(renderedFrame,mCalibrated?mCameraMatrix:null,gravity);
+        return mQRDetector.handleFrame(renderedFrame,mCameraMatrix,gravity);
     }
 
     @Override

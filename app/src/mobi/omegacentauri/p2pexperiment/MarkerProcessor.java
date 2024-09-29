@@ -1,5 +1,7 @@
 package mobi.omegacentauri.p2pexperiment;
 
+import android.util.Log;
+
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
 import org.opencv.core.Point;
@@ -63,8 +65,9 @@ public class MarkerProcessor {
                     P2PExperiment experiment = new P2PExperiment(cameraMatrix, marker1, marker2, gravity);
                     List<List<Point>> out = experiment.getTestPositions();
                     for (List<Point> p : out)
-                        for (int i = 0 ; i < 5 ; i++)
-                            Imgproc.line(inputFrame, p.get(i), p.get((i+1)%2), DestColor, 3);
+                        for (int i = 0 ; i < 4 ; i++) {
+                            Imgproc.line(inputFrame, p.get(i), p.get((i + 1) % 4), DestColor, 3);
+                        }
                 }
             }
         }

@@ -7,6 +7,16 @@
         <item android:id="@+id/arucoMode"
             android:title="Marker mode"
             android:showAsAction="always|withText" />
+        <item android:id="@+id/reset_calibration"
+            android:title="Reset"
+            android:showAsAction="never"
+            />
+        <item android:id="@+id/distortion_mode"
+            android:title="Allow distortion"
+            android:checkable="true"
+            android:checked="true"
+            android:showAsAction="never"
+            />
         <item android:id="@+id/preview_mode"
               android:title="@string/preview_mode">
               <menu>

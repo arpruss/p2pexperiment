@@ -1,7 +1,9 @@
 package mobi.omegacentauri.p2pexperiment.calibration;
 
+import android.hardware.Camera;
 import android.util.Log;
 
+import org.opencv.android.JavaCameraView;
 import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.CvType;
@@ -14,6 +16,7 @@ import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -29,18 +32,67 @@ public class CameraCalibrator {
 
     private Mat mCameraMatrix = new Mat();
     private Mat mDistortionCoefficients = new Mat();
-    private int mFlags;
     private double mRms;
     private double mSquareSize = 0.0181;
     private Size mImageSize;
 
-    public CameraCalibrator(int width, int height) {
+    private boolean mAllowDistortion;
+
+    public static double estimateFocalLength(JavaCameraView v, Size imageSize) {
+        try {
+            Field cameraField = JavaCameraView.class.getDeclaredField("mCamera");
+            cameraField.setAccessible(true);
+            Camera c = (Camera)cameraField.get(v);
+            if (c == null)
+                return 0;
+            Camera.Parameters params = c.getParameters();
+            if (params == null)
+                return 0;
+            double hva = params.getHorizontalViewAngle();
+            if (hva == 0)
+                return 0;
+            return imageSize.width / 2. / (Math.tan(hva/2*Math.PI/180));
+        }
+        catch(NoSuchFieldException e) {
+            return 0;
+        } catch (IllegalAccessException e) {
+            return 0;
+        }
+    }
+
+    public static boolean estimateCameraMatrix(Mat cameraMatrix, JavaCameraView view, Size size, boolean tryHarder) {
+        double fl = estimateFocalLength(view, size);
+        if (fl == 0) {
+            if (tryHarder)
+                fl = size.width / 2 / (Math.tan(Math.PI/6));
+            else
+                return false;
+        }
+
+        cameraMatrix.put(0,0, new double [] {
+                fl, 0, size.width/2,
+                0, fl, size.height/2,
+                0, 0, 1
+        });
+
+        return true;
+    }
+
+    public int getFlags() {
+        int flags = Calib3d.CALIB_FIX_PRINCIPAL_POINT +
+                Calib3d.CALIB_ZERO_TANGENT_DIST +
+                Calib3d.CALIB_FIX_ASPECT_RATIO +
+                Calib3d.CALIB_FIX_K4 +
+                Calib3d.CALIB_FIX_K5;
+        if (!mAllowDistortion)
+            flags += Calib3d.CALIB_FIX_S1_S2_S3_S4+Calib3d.CALIB_FIX_K1+Calib3d.CALIB_FIX_K2+Calib3d.CALIB_FIX_K3+Calib3d.CALIB_FIX_S1_S2_S3_S4;
+
+        return flags;
+    }
+
+    public CameraCalibrator(int width, int height, boolean allowDistortion) {
+        mAllowDistortion = allowDistortion;
         mImageSize = new Size(width, height);
-        mFlags = Calib3d.CALIB_FIX_PRINCIPAL_POINT +
-                 Calib3d.CALIB_ZERO_TANGENT_DIST +
-                 Calib3d.CALIB_FIX_ASPECT_RATIO +
-                 Calib3d.CALIB_FIX_K4 +
-                 Calib3d.CALIB_FIX_K5;
         Mat.eye(3, 3, CvType.CV_64FC1).copyTo(mCameraMatrix);
         mCameraMatrix.put(0, 0, 1.0);
         Mat.zeros(5, 1, CvType.CV_64FC1).copyTo(mDistortionCoefficients);
@@ -52,7 +104,7 @@ public class CameraCalibrator {
         renderFrame(rgbaFrame);
     }
 
-    public void calibrate() {
+    public void calibrate(JavaCameraView view) {
         ArrayList<Mat> rvecs = new ArrayList<>();
         ArrayList<Mat> tvecs = new ArrayList<>();
         Mat reprojectionErrors = new Mat();
@@ -63,8 +115,18 @@ public class CameraCalibrator {
             objectPoints.add(objectPoints.get(0));
         }
 
+        int flags = getFlags();
+
+        /*
+        if (estimateCameraMatrix(mCameraMatrix, view, mImageSize, false)) {
+            flags += Calib3d.CALIB_USE_INTRINSIC_GUESS;
+            Log.v("Aruco", "using guess "+mCameraMatrix.dump());
+        } */
+
         Calib3d.calibrateCamera(objectPoints, mCornersBuffer, mImageSize,
-                mCameraMatrix, mDistortionCoefficients, rvecs, tvecs, mFlags);
+                mCameraMatrix, mDistortionCoefficients, rvecs, tvecs, flags);
+
+        Log.v("Aruco", "computed "+mCameraMatrix.dump());
 
         mIsCalibrated = Core.checkRange(mCameraMatrix)
                 && Core.checkRange(mDistortionCoefficients);
@@ -77,6 +139,11 @@ public class CameraCalibrator {
 
     public void clearCorners() {
         mCornersBuffer.clear();
+    }
+
+    public void reset() {
+        mIsCalibrated = false;
+        CalibrationResult.setDefaults(mCameraMatrix,mDistortionCoefficients);
     }
 
     private void calcBoardCornerPositions(Mat corners) {
@@ -141,7 +208,7 @@ public class CameraCalibrator {
         drawPoints(rgbaFrame);
 
         Imgproc.putText(rgbaFrame, "Captured: " + mCornersBuffer.size(), new Point(rgbaFrame.cols() / 3 * 2, rgbaFrame.rows() * 0.1),
-                Imgproc.FONT_HERSHEY_SIMPLEX, 1.0, new Scalar(255, 255, 0));
+                Imgproc.FONT_HERSHEY_SIMPLEX, 2.0, new Scalar(255, 255, 0));
     }
 
     public Mat getCameraMatrix() {
@@ -166,5 +233,13 @@ public class CameraCalibrator {
 
     public void setCalibrated() {
         mIsCalibrated = true;
+    }
+
+    public void setAllowDistortion(boolean allowDistortion) {
+        mAllowDistortion = allowDistortion;
+    }
+
+    public boolean isAllowDistortion() {
+        return mAllowDistortion;
     }
 }

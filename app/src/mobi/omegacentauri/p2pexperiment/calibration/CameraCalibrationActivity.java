@@ -15,9 +15,11 @@ package mobi.omegacentauri.p2pexperiment.calibration;
 
 import android.app.ProgressDialog;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -32,8 +34,10 @@ import org.opencv.android.CameraActivity;
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewFrame;
 import org.opencv.android.CameraBridgeViewBase.CvCameraViewListener2;
+import org.opencv.android.JavaCameraView;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Mat;
+
 import mobi.omegacentauri.p2pexperiment.R;
 
 import java.util.Collections;
@@ -43,13 +47,16 @@ import mobi.omegacentauri.p2pexperiment.MarkerDetectionActivity;
 
 public class CameraCalibrationActivity extends CameraActivity implements CvCameraViewListener2, OnTouchListener {
     private static final String TAG = "OCVSample::Activity";
+    public static final String ALLOW_DISTORTION = "ALLOW_DISTORTION";
 
-    private CameraBridgeViewBase mOpenCvCameraView;
+//    private CameraBridgeViewBase mOpenCvCameraView;
+    private JavaCameraView mOpenCvCameraView;
     private CameraCalibrator mCalibrator;
     private OnCameraFrameRender mOnCameraFrameRender;
     private Menu mMenu;
     private int mWidth;
     private int mHeight;
+    private SharedPreferences pref;
 
     public CameraCalibrationActivity() {
         Log.i(TAG, "Instantiated new " + this.getClass());
@@ -59,6 +66,8 @@ public class CameraCalibrationActivity extends CameraActivity implements CvCamer
     public void onCreate(Bundle savedInstanceState) {
         Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
+        
+        pref = PreferenceManager.getDefaultSharedPreferences(this);
 
         if (OpenCVLoader.initLocal()) {
             Log.i(TAG, "OpenCV loaded successfully");
@@ -72,7 +81,7 @@ public class CameraCalibrationActivity extends CameraActivity implements CvCamer
 
         setContentView(R.layout.camera_calibration_surface_view);
 
-        mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.camera_calibration_java_surface_view);
+        mOpenCvCameraView = (JavaCameraView) findViewById(R.id.camera_calibration_java_surface_view);
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
     }
@@ -121,6 +130,7 @@ public class CameraCalibrationActivity extends CameraActivity implements CvCamer
         if (mCalibrator != null && !mCalibrator.isCalibrated()) {
             menu.findItem(R.id.preview_mode).setEnabled(false);
         }
+        menu.findItem(R.id.distortion_mode).setChecked(pref.getBoolean(ALLOW_DISTORTION, true));
         return true;
     }
 
@@ -135,6 +145,20 @@ public class CameraCalibrationActivity extends CameraActivity implements CvCamer
             Intent i = new Intent(this, MarkerDetectionActivity.class);
             startActivity(i);
             return true;
+        } else if (item.getItemId() == R.id.distortion_mode) {
+            boolean allow = ! mCalibrator.isAllowDistortion();
+            mCalibrator.setAllowDistortion(allow);
+            pref.edit().putBoolean(ALLOW_DISTORTION, allow).apply();;
+            item.setChecked(allow);
+            mCalibrator.reset();
+            return true;
+        }
+        else if (item.getItemId() == R.id.reset_calibration) {
+            Log.v("Aruco", "reset()");
+            mCalibrator.reset();
+            CalibrationResult.save(CameraCalibrationActivity.this,
+                    null, null);
+            Log.v("Aruco", "-reset()");
         } else if (item.getItemId() == R.id.undistortion) {
             mOnCameraFrameRender =
                 new OnCameraFrameRender(new UndistortionFrameRender(mCalibrator));
@@ -168,7 +192,7 @@ public class CameraCalibrationActivity extends CameraActivity implements CvCamer
 
                 @Override
                 protected Void doInBackground(Void... arg0) {
-                    mCalibrator.calibrate();
+                    mCalibrator.calibrate(mOpenCvCameraView);
                     return null;
                 }
 
@@ -189,16 +213,15 @@ public class CameraCalibrationActivity extends CameraActivity implements CvCamer
                 }
             }.execute();
             return true;
-        } else {
-            return super.onOptionsItemSelected(item);
         }
+        return super.onOptionsItemSelected(item);
     }
 
     public void onCameraViewStarted(int width, int height) {
         if (mWidth != width || mHeight != height) {
             mWidth = width;
             mHeight = height;
-            mCalibrator = new CameraCalibrator(mWidth, mHeight);
+            mCalibrator = new CameraCalibrator(mWidth, mHeight, pref.getBoolean(ALLOW_DISTORTION, true));
             if (CalibrationResult.tryLoad(this, mCalibrator.getCameraMatrix(), mCalibrator.getDistortionCoefficients())) {
                 mCalibrator.setCalibrated();
             } else {
@@ -215,7 +238,7 @@ public class CameraCalibrationActivity extends CameraActivity implements CvCamer
     }
 
     public Mat onCameraFrame(CvCameraViewFrame inputFrame) {
-        return mOnCameraFrameRender.render(inputFrame);
+            return mOnCameraFrameRender.render(inputFrame);
     }
 
     @Override
