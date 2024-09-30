@@ -43,8 +43,12 @@ public class P2PExperiment {
     private double h1,h2,d1,d2;
     private Mat cameraPosition;
     private Mat worldToCameraRotation;
-
-    private boolean p4p;
+    private static final double[][] markerOrder = {
+        { -1, 1 },
+        { 1, 1 },
+        { 1, -1 },
+        { -1, -1 }
+    };
 
     P2PExperiment(Mat cameraMatrix, Mat marker1, Mat marker2, Mat marker3, Mat marker4, double[] gravity, Boolean verticalMode) {
         mCameraMatrix = cameraMatrix;
@@ -69,8 +73,6 @@ public class P2PExperiment {
             m4 = new Point3(hSpacing,vSpacing, 0);
         }
 
-        p4p = marker3 != null && marker4 != null;
-
         d = Math.sqrt(Math.pow(m1.x-m2.x,2)+Math.pow(m1.y-m2.y,2));
 
         m1_mat = toVector(m1);
@@ -93,10 +95,80 @@ public class P2PExperiment {
         computeSolution();
         computePosition();
         computeRotation();
-        if (p4p) {
+        if (marker3 != null && marker4 != null) {
             marker3CameraVector = camera2DToVector(getQuadCenter(marker3));
             marker4CameraVector = camera2DToVector(getQuadCenter(marker4));
             p4pCheck();
+        }
+        if (marker3 != null || marker4 != null) {
+            pnpCheck(marker1,marker2,marker3,marker4);
+        }
+    }
+
+    private void pnpCheck(Mat marker1, Mat marker2, Mat marker3, Mat marker4) {
+        int count = 2;
+        if (marker3 != null)
+            count++;
+        if (marker4 != null)
+            count++;
+        Point3 objectPoints[] = new Point3[4*count];
+        Point cameraPoints[] = new Point[4*count];
+        int i = 0;
+        putObjectPoints(objectPoints, m1, i);
+        putCameraPoints(cameraPoints, marker1, i);
+        i += 4;
+        putObjectPoints(objectPoints, m2, i);
+        putCameraPoints(cameraPoints, marker2, i);
+        i += 4;
+        if (marker3 != null) {
+            putObjectPoints(objectPoints, m3, i);
+            putCameraPoints(cameraPoints, marker3, i);
+            i += 4;
+        }
+        if (marker4 != null) {
+            putObjectPoints(objectPoints, m4, i);
+            putCameraPoints(cameraPoints, marker4, i);
+        }
+        Mat rvec = new Mat();
+        Mat tvec = new Mat();
+        MatOfDouble distCoeffs = new MatOfDouble(); //0,0,0,0,0);
+        MatOfPoint3f obj = new MatOfPoint3f(objectPoints);
+        MatOfPoint2f cam = new MatOfPoint2f(cameraPoints);
+        Calib3d.solvePnP(new MatOfPoint3f(objectPoints),
+                new MatOfPoint2f(cameraPoints),
+                mCameraMatrix,distCoeffs,rvec,tvec);
+        Mat rot = new Mat();
+        Calib3d.Rodrigues(rvec, rot);
+        Mat position = rot.t().matMul(tvec);
+        double x = -position.get(0,0)[0];
+        double y = -position.get(1,0)[0];
+        double z = -position.get(2,0)[0];
+        Mat diff = new Mat();
+        Core.add(position,cameraPosition,diff);
+        Log.v("Aruco",  "pnp: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
+    }
+
+    private void putCameraPoints(Point[] cameraPoints, Mat marker, int i) {
+        for (int j = 0 ; j < 4 ; j++) {
+            cameraPoints[i+j] = new Point( marker.get(0, j)[0], marker.get(0, j)[1]);
+        }
+    }
+
+    private void putObjectPoints(Point3[] objectPoints, Point3 m, int i) {
+        double dy,dz;
+        if (mVertical) {
+            dy = 0;
+            dz = -1;
+        }
+        else {
+            dy = 1;
+            dz = 0;
+        }
+        for (int j=0; j<4; j++) {
+            objectPoints[i+j] = new Point3(
+                    m.x + markerOrder[j][0] * markerSize / 2,
+                 m.y + dy * markerOrder[j][1] * markerSize / 2,
+                    m.z + dz * markerOrder[j][1] * markerSize / 2 );
         }
     }
 
@@ -115,23 +187,19 @@ public class P2PExperiment {
     private void p4pCheck() {
         MatOfPoint3f objectPoints = new MatOfPoint3f(m1,m2,m3,m4);
         MatOfPoint2f cameraPoints = new MatOfPoint2f(getQuadCenter(mMarker1),getQuadCenter(mMarker2),getQuadCenter(mMarker3),getQuadCenter(mMarker4));
-//        MatOfDouble rvec = new MatOfDouble();// new Mat(3,1,CvType.CV_64FC1);
-//        MatOfDouble tvec = new MatOfDouble();// Mat(3,1,CvType.CV_64FC1);
         Mat rvec = new Mat();
         Mat tvec = new Mat();
-        MatOfDouble distCoeffs = new MatOfDouble(); //0,0,0,0,0);
+        MatOfDouble distCoeffs = new MatOfDouble();
         Calib3d.solvePnP(objectPoints,cameraPoints,mCameraMatrix,distCoeffs,rvec,tvec);
-//        tvec.put(0,0,-tvec.get(0,0)[0]);
-//        tvec.put(1,0,-tvec.get(1,0)[0]);
         Mat rot = new Mat();
         Calib3d.Rodrigues(rvec, rot);
-        Mat position = rot.inv().matMul(tvec);
+        Mat position = rot.t().matMul(tvec);
         double x = -position.get(0,0)[0];
         double y = -position.get(1,0)[0];
         double z = -position.get(2,0)[0];
         Mat diff = new Mat();
         Core.add(position,cameraPosition,diff);
-        Log.v("Aruco",  "error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
+        Log.v("Aruco",  "p4p: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
     }
     private Mat rotationAboutAxis(Mat axis, double angle) {
         double c = Math.cos(angle);
