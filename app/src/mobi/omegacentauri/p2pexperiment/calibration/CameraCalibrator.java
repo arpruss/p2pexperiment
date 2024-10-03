@@ -85,7 +85,7 @@ public class CameraCalibrator {
                 Calib3d.CALIB_FIX_K4 +
                 Calib3d.CALIB_FIX_K5;
         if (!mAllowDistortion)
-            flags += Calib3d.CALIB_FIX_S1_S2_S3_S4+Calib3d.CALIB_FIX_K1+Calib3d.CALIB_FIX_K2+Calib3d.CALIB_FIX_K3+Calib3d.CALIB_FIX_S1_S2_S3_S4;
+            flags += Calib3d.CALIB_FIX_S1_S2_S3_S4+Calib3d.CALIB_FIX_K1+Calib3d.CALIB_FIX_K2+Calib3d.CALIB_FIX_K3+Calib3d.CALIB_FIX_S1_S2_S3_S4+Calib3d.CALIB_FIX_TAUX_TAUY;
 
         return flags;
     }
@@ -95,6 +95,7 @@ public class CameraCalibrator {
         mImageSize = new Size(width, height);
         Mat.eye(3, 3, CvType.CV_64FC1).copyTo(mCameraMatrix);
         mCameraMatrix.put(0, 0, 1.0);
+        //TODO: mCameraMatrix.put(1, 1, 1.0);
         Mat.zeros(5, 1, CvType.CV_64FC1).copyTo(mDistortionCoefficients);
         Log.i(TAG, "Instantiated new " + this.getClass());
     }

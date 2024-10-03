@@ -47,10 +47,12 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     private SensorManager sensorManager;
     private Sensor gravitySensor;
     private MenuItem mItemVertical;
+    private MenuItem mItemFiltered;
     private SharedPreferences prefs;
     private Boolean mVertical = false;
+    private Boolean mFiltered = false;
     private static final String VERTICAL = "Vertical";
-
+    private static final String FILTERED = "Filtered";
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -58,6 +60,7 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
 
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         mVertical = prefs.getBoolean(VERTICAL, false);
+        mFiltered = prefs.getBoolean(FILTERED, false);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -122,11 +125,15 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     public boolean onCreateOptionsMenu(Menu menu) {
         Log.i(TAG, "called onCreateOptionsMenu");
         mItemCalibration = menu.add("Calibration");
-        mItemCalibration.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        mItemCalibration.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_NEVER);
         mItemVertical = menu.add("Vertical mode");
         mItemVertical.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_NEVER);
         mItemVertical.setCheckable(true);
         mItemVertical.setChecked(mVertical);
+        mItemFiltered = menu.add("Filtered mode");
+        mItemFiltered.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_NEVER);
+        mItemFiltered.setCheckable(true);
+        mItemFiltered.setChecked(mFiltered);
         return true;
     }
 
@@ -139,7 +146,12 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         } else if (item == mItemVertical) {
             mVertical = ! mVertical;
             mItemVertical.setChecked(mVertical);
-            prefs.edit().putBoolean(VERTICAL, mVertical).apply();;
+            prefs.edit().putBoolean(VERTICAL, mVertical).apply();
+            return true;
+        } else if (item == mItemFiltered) {
+            mFiltered = ! mFiltered;
+            mItemFiltered.setChecked(mFiltered);
+            prefs.edit().putBoolean(FILTERED, mFiltered).apply();
             return true;
         }
 
@@ -162,7 +174,7 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         else {
             renderedFrame = inputFrame.rgba();
         }
-        return mQRDetector.handleFrame(renderedFrame,mCameraMatrix,gravity,mVertical);
+        return mQRDetector.handleFrame(renderedFrame,mCameraMatrix,gravity,mVertical,mFiltered);
     }
 
     @Override

@@ -1,6 +1,10 @@
 package mobi.omegacentauri.p2pexperiment;
 
+import org.opencv.core.Core;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfInt;
+import org.opencv.core.Range;
+import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Point;
 import org.opencv.imgproc.Imgproc;
@@ -49,10 +53,23 @@ public class MarkerProcessor {
 
     /* this method to be called from the outside. It processes the frame to find QR codes. */
     public synchronized Mat handleFrame(Mat inputFrame, Mat cameraMatrix, double[] gravity,
-                                        Boolean verticalMode) {
+                                        Boolean verticalMode, Boolean myColorFilter) {
         List<Mat> corners = new ArrayList<Mat>();
         Mat ids = new Mat();
-        boolean result = findQRs(inputFrame, corners, ids);
+
+        Mat filtered;
+        if (myColorFilter) {
+            Core.multiply(inputFrame, new Scalar(0, 1, 1), inputFrame);
+            double blackPoint = .4;
+            double whitePoint = .7;
+            Core.addWeighted(inputFrame, 1 / (whitePoint - blackPoint), inputFrame, 0, -blackPoint * 255 / (whitePoint - blackPoint), inputFrame);
+            filtered = new Mat();
+            Imgproc.cvtColor(inputFrame, filtered, Imgproc.COLOR_RGBA2GRAY, 1);
+        }
+        else {
+            filtered = inputFrame;
+        }
+        boolean result = findQRs(filtered, corners, ids);
         if (result) {
             renderQRs(inputFrame, corners, ids);
 
@@ -78,6 +95,30 @@ public class MarkerProcessor {
                         for (int i = 0 ; i < 4 ; i++) {
                             Imgproc.line(inputFrame, p.get(i), p.get((i + 1) % 4), DestColor, 3);
                         }
+                    int rotationIndex = getRotation(gravity);
+                    if (rotationIndex != -1)
+                        Core.rotate(inputFrame, inputFrame, rotationIndex);
+                    Mat darken = new Mat(inputFrame, new Rect(0,0,900,150));
+                    Core.multiply(darken, new Scalar(0.5,0.5,0.5), darken);
+                    String s = String.format("P2PA: %.1f,%.1f,%.1f",
+                            experiment.cameraPosition.get(0,0)[0],
+                            experiment.cameraPosition.get(1,0)[0],
+                            experiment.cameraPosition.get(2,0)[0]
+                            );
+                    Imgproc.putText(inputFrame,s,new Point(5,60),
+                            0,2,SourceColor);
+                    if (experiment.cameraPositionP16P != null) {
+                        s = String.format("P16P: %.1f,%.1f,%.1f",
+                                experiment.cameraPositionP16P.get(0, 0)[0],
+                                experiment.cameraPositionP16P.get(1, 0)[0],
+                                experiment.cameraPositionP16P.get(2, 0)[0]
+                        );
+                        Imgproc.putText(inputFrame, s, new Point(5, 120),
+                                0, 2, SourceColor);
+                    }
+                    if (rotationIndex != -1) {
+                        Core.rotate(inputFrame, inputFrame, 2-rotationIndex);
+                    }
                 }
             }
         }
@@ -85,5 +126,30 @@ public class MarkerProcessor {
             c.release();
         ids.release();
         return inputFrame;
+    }
+
+    private static int getRotation(double[] gravity) {
+        double ax = Math.abs(gravity[0]);
+        double ay = Math.abs(gravity[1]);
+        double az = Math.abs(gravity[2]);
+        if (az >= ax && az >= ay) {
+            return -1;
+        }
+        if (ax >= ay) {
+            if (gravity[0]>=0) {
+                return -1;
+            }
+            else {
+                return Core.ROTATE_180;
+            }
+        }
+        else {
+            if (gravity[1]>=0) {
+                return Core.ROTATE_90_CLOCKWISE;
+            }
+            else {
+                return Core.ROTATE_90_COUNTERCLOCKWISE;
+            }
+        }
     }
 }

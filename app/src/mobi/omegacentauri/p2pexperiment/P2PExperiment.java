@@ -41,7 +41,9 @@ public class P2PExperiment {
     private double rho1;
     private double rho2;
     private double h1,h2,d1,d2;
-    private Mat cameraPosition;
+    public Mat cameraPosition;
+    private Mat cameraPositionP4P = null;
+    public Mat cameraPositionP16P = null;
     private Mat worldToCameraRotation;
     private static final double[][] markerOrder = {
         { -1, 1 },
@@ -101,11 +103,11 @@ public class P2PExperiment {
             p4pCheck();
         }
         if (marker3 != null || marker4 != null) {
-            pnpCheck(marker1,marker2,marker3,marker4);
+            p16pCheck(marker1,marker2,marker3,marker4);
         }
     }
 
-    private void pnpCheck(Mat marker1, Mat marker2, Mat marker3, Mat marker4) {
+    private void p16pCheck(Mat marker1, Mat marker2, Mat marker3, Mat marker4) {
         int count = 2;
         if (marker3 != null)
             count++;
@@ -139,13 +141,15 @@ public class P2PExperiment {
                 mCameraMatrix,distCoeffs,rvec,tvec);
         Mat rot = new Mat();
         Calib3d.Rodrigues(rvec, rot);
-        Mat position = rot.t().matMul(tvec);
-        double x = -position.get(0,0)[0];
-        double y = -position.get(1,0)[0];
-        double z = -position.get(2,0)[0];
+        Mat negPosition = rot.t().matMul(tvec);
+        double x = -negPosition.get(0,0)[0];
+        double y = -negPosition.get(1,0)[0];
+        double z = -negPosition.get(2,0)[0];
+        cameraPositionP16P = new Mat(3,1,CvType.CV_64FC1);
+        cameraPositionP16P.put(0,0, new double[] {x,y,z});
         Mat diff = new Mat();
-        Core.add(position,cameraPosition,diff);
-        Log.v("Aruco",  "pnp: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
+        Core.add(negPosition,cameraPosition,diff);
+        Log.v("Aruco",  "p16p: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
     }
 
     private void putCameraPoints(Point[] cameraPoints, Mat marker, int i) {
@@ -193,12 +197,14 @@ public class P2PExperiment {
         Calib3d.solvePnP(objectPoints,cameraPoints,mCameraMatrix,distCoeffs,rvec,tvec);
         Mat rot = new Mat();
         Calib3d.Rodrigues(rvec, rot);
-        Mat position = rot.t().matMul(tvec);
-        double x = -position.get(0,0)[0];
-        double y = -position.get(1,0)[0];
-        double z = -position.get(2,0)[0];
+        Mat negPosition = rot.t().matMul(tvec);
+        double x = -negPosition.get(0,0)[0];
+        double y = -negPosition.get(1,0)[0];
+        double z = -negPosition.get(2,0)[0];
+        cameraPositionP4P = new Mat(3,1,CvType.CV_64FC1);
+        cameraPositionP4P.put(0,0, new double[] {x,y,z});
         Mat diff = new Mat();
-        Core.add(position,cameraPosition,diff);
+        Core.add(negPosition,cameraPosition,diff);
         Log.v("Aruco",  "p4p: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
     }
     private Mat rotationAboutAxis(Mat axis, double angle) {
