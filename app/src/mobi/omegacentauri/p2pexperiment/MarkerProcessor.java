@@ -106,7 +106,7 @@ public class MarkerProcessor {
                             experiment.cameraPosition.get(2,0)[0]
                             );
                     Imgproc.putText(inputFrame,s,new Point(5,60),
-                            0,2,SourceColor);
+                            0,2,SourceColor, 2);
                     if (experiment.cameraPositionP16P != null) {
                         s = String.format("P16P: %.1f,%.1f,%.1f",
                                 experiment.cameraPositionP16P.get(0, 0)[0],
@@ -114,7 +114,7 @@ public class MarkerProcessor {
                                 experiment.cameraPositionP16P.get(2, 0)[0]
                         );
                         Imgproc.putText(inputFrame, s, new Point(5, 120),
-                                0, 2, SourceColor);
+                                0, 2, SourceColor, 2);
                     }
                     if (rotationIndex != -1) {
                         Core.rotate(inputFrame, inputFrame, 2-rotationIndex);
