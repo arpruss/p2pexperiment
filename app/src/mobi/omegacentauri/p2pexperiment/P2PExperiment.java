@@ -45,6 +45,7 @@ public class P2PExperiment {
     private Mat cameraPositionP4P = null;
     public Mat cameraPositionP16P = null;
     private Mat worldToCameraRotation;
+    private static final boolean INCLUDE_P4P = false;
     private static final double[][] markerOrder = {
         { -1, 1 },
         { 1, 1 },
@@ -100,9 +101,7 @@ public class P2PExperiment {
         if (marker3 != null && marker4 != null) {
             marker3CameraVector = camera2DToVector(getQuadCenter(marker3));
             marker4CameraVector = camera2DToVector(getQuadCenter(marker4));
-            p4pCheck();
-        }
-        if (marker3 != null || marker4 != null) {
+            if (INCLUDE_P4P) p4pCheck();
             p16pCheck(marker1,marker2,marker3,marker4);
         }
     }
@@ -149,7 +148,12 @@ public class P2PExperiment {
         cameraPositionP16P.put(0,0, new double[] {x,y,z});
         Mat diff = new Mat();
         Core.add(negPosition,cameraPosition,diff);
-        Log.v("Aruco",  "p16p: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
+        Log.v("Aruco",  "P16P: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
+        Log.v("Aruco",  "ARUCO_FULL_DATA: "+x+" "+y+" "+z+" "+
+                cameraPosition.get(0,0)[0]+" "+
+                cameraPosition.get(1,0)[0]+" "+
+                cameraPosition.get(2,0)[0]
+                );
     }
 
     private void putCameraPoints(Point[] cameraPoints, Mat marker, int i) {
@@ -162,7 +166,7 @@ public class P2PExperiment {
         double dy,dz;
         if (mVertical) {
             dy = 0;
-            dz = -1;
+            dz = 1;
         }
         else {
             dy = 1;

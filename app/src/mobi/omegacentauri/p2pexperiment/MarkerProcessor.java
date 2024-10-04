@@ -70,6 +70,9 @@ public class MarkerProcessor {
             filtered = inputFrame;
         }
         boolean result = findQRs(filtered, corners, ids);
+        if (myColorFilter)
+            filtered.release();
+
         if (result) {
             renderQRs(inputFrame, corners, ids);
 
@@ -96,16 +99,23 @@ public class MarkerProcessor {
                             Imgproc.line(inputFrame, p.get(i), p.get((i + 1) % 4), DestColor, 3);
                         }
                     int rotationIndex = getRotation(gravity);
-                    if (rotationIndex != -1)
-                        Core.rotate(inputFrame, inputFrame, rotationIndex);
-                    Mat darken = new Mat(inputFrame, new Rect(0,0,900,150));
+                    Mat rotatedFrame;
+                    if (rotationIndex != -1) {
+                        rotatedFrame = new Mat();
+                        Core.rotate(inputFrame, rotatedFrame, rotationIndex);
+                    }
+                    else {
+                        rotatedFrame = inputFrame;
+                    }
+                    Mat darken = new Mat(rotatedFrame, new Rect(0,0,900,150));
                     Core.multiply(darken, new Scalar(0.5,0.5,0.5), darken);
+                    darken.release();
                     String s = String.format("P2PA: %.1f,%.1f,%.1f",
                             experiment.cameraPosition.get(0,0)[0],
                             experiment.cameraPosition.get(1,0)[0],
                             experiment.cameraPosition.get(2,0)[0]
                             );
-                    Imgproc.putText(inputFrame,s,new Point(5,60),
+                    Imgproc.putText(rotatedFrame,s,new Point(5,60),
                             0,2,SourceColor, 2);
                     if (experiment.cameraPositionP16P != null) {
                         s = String.format("P16P: %.1f,%.1f,%.1f",
@@ -113,11 +123,12 @@ public class MarkerProcessor {
                                 experiment.cameraPositionP16P.get(1, 0)[0],
                                 experiment.cameraPositionP16P.get(2, 0)[0]
                         );
-                        Imgproc.putText(inputFrame, s, new Point(5, 120),
+                        Imgproc.putText(rotatedFrame, s, new Point(5, 120),
                                 0, 2, SourceColor, 2);
                     }
                     if (rotationIndex != -1) {
-                        Core.rotate(inputFrame, inputFrame, 2-rotationIndex);
+                        Core.rotate(rotatedFrame, inputFrame, 2-rotationIndex);
+                        rotatedFrame.release();
                     }
                 }
             }
