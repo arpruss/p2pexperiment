@@ -22,6 +22,7 @@ public class P2PExperiment {
     private final Mat m4_mat;
     private final Boolean mVertical;
     private final Mat mMarker1,mMarker2,mMarker3,mMarker4;
+    public double error;
     private Mat marker3CameraVector;
     private Mat marker4CameraVector;
     private final Mat mCameraMatrix;
@@ -148,7 +149,8 @@ public class P2PExperiment {
         cameraPositionP16P.put(0,0, new double[] {x,y,z});
         Mat diff = new Mat();
         Core.add(negPosition,cameraPosition,diff);
-        Log.v("Aruco",  "P16P: error at "+x+" "+y+" "+z+" is "+Core.norm(diff));
+        error = Core.norm(diff);
+        Log.v("Aruco",  "P16P: error at "+x+" "+y+" "+z+" is "+error);
         Log.v("Aruco",  "ARUCO_FULL_DATA: "+x+" "+y+" "+z+" "+
                 cameraPosition.get(0,0)[0]+" "+
                 cameraPosition.get(1,0)[0]+" "+

@@ -38,26 +38,27 @@ public class CameraCalibrator {
 
     private boolean mAllowDistortion;
 
-    public static double estimateFocalLength(JavaCameraView v, Size imageSize) {
+    public static Camera getCamera(JavaCameraView v) {
         try {
             Field cameraField = JavaCameraView.class.getDeclaredField("mCamera");
             cameraField.setAccessible(true);
-            Camera c = (Camera)cameraField.get(v);
-            if (c == null)
-                return 0;
-            Camera.Parameters params = c.getParameters();
-            if (params == null)
-                return 0;
-            double hva = params.getHorizontalViewAngle();
-            if (hva == 0)
-                return 0;
-            return imageSize.width / 2. / (Math.tan(hva/2*Math.PI/180));
+            return (Camera) cameraField.get(v);
         }
-        catch(NoSuchFieldException e) {
-            return 0;
-        } catch (IllegalAccessException e) {
-            return 0;
+        catch(NoSuchFieldException | IllegalAccessException e) {
+            return null;
         }
+    }
+    public static double estimateFocalLength(JavaCameraView v, Size imageSize) {
+        Camera c = getCamera(v);
+        if (c == null)
+            return 0;
+        Camera.Parameters params = c.getParameters();
+        if (params == null)
+            return 0;
+        double hva = params.getHorizontalViewAngle();
+        if (hva == 0)
+            return 0;
+        return imageSize.width / 2. / (Math.tan(hva/2*Math.PI/180));
     }
 
     public static boolean estimateCameraMatrix(Mat cameraMatrix, JavaCameraView view, Size size, boolean tryHarder) {

@@ -17,6 +17,7 @@ import mobi.omegacentauri.p2pexperiment.calibration.CameraCalibrator;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.hardware.Camera;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -48,11 +49,20 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     private Sensor gravitySensor;
     private MenuItem mItemVertical;
     private MenuItem mItemFiltered;
+    private MenuItem mItemSubPixel;
+    private MenuItem mItemFocus;
+    private MenuItem mItemContinuousFocus;
     private SharedPreferences prefs;
     private Boolean mVertical = false;
+    private Boolean mContinuousFocus = true;
     private Boolean mFiltered = false;
+    private Boolean mSubPixel = false;
     private static final String VERTICAL = "Vertical";
     private static final String FILTERED = "Filtered";
+    private static final String SUBPIXEL = "SubPixel";
+    private static final String CONTINUOUS = "ContinuousFocus";
+    private boolean didSetCameraParemeters;
+    private boolean mForceFocus = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -61,6 +71,8 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         prefs = PreferenceManager.getDefaultSharedPreferences(this);
         mVertical = prefs.getBoolean(VERTICAL, false);
         mFiltered = prefs.getBoolean(FILTERED, false);
+        mSubPixel = prefs.getBoolean(SUBPIXEL, false);
+        mContinuousFocus = prefs.getBoolean(CONTINUOUS, true);
 
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
 
@@ -97,6 +109,7 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     {
         super.onResume();
 
+        didSetCameraParemeters = false;
         gravity[0] = 0;
         gravity[1] = 0;
         gravity[2] = 0;
@@ -134,6 +147,17 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         mItemFiltered.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_NEVER);
         mItemFiltered.setCheckable(true);
         mItemFiltered.setChecked(mFiltered);
+        mItemContinuousFocus = menu.add("Continuous focus");
+        mItemContinuousFocus.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_NEVER);
+        mItemContinuousFocus.setCheckable(true);
+        mItemContinuousFocus.setChecked(mContinuousFocus);
+        mItemSubPixel = menu.add("Subpixel mode");
+        mItemSubPixel.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_NEVER);
+        mItemSubPixel.setCheckable(true);
+        mItemSubPixel.setChecked(mSubPixel);
+        mItemFocus = menu.add("Focus");
+        mItemFocus.setShowAsActionFlags(MenuItem.SHOW_AS_ACTION_ALWAYS);
+        mItemFocus.setVisible(! mContinuousFocus);
         return true;
     }
 
@@ -153,8 +177,23 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
             mItemFiltered.setChecked(mFiltered);
             prefs.edit().putBoolean(FILTERED, mFiltered).apply();
             return true;
+        } else if (item == mItemSubPixel) {
+            mSubPixel = ! mSubPixel;
+            mItemFiltered.setChecked(mSubPixel);
+            prefs.edit().putBoolean(SUBPIXEL, mSubPixel).apply();
+            return true;
+        } else if (item == mItemContinuousFocus) {
+            mContinuousFocus = ! mContinuousFocus;
+            mItemContinuousFocus.setChecked(mContinuousFocus);
+            prefs.edit().putBoolean(CONTINUOUS, mContinuousFocus).apply();
+            didSetCameraParemeters = false;
+            mItemFocus.setVisible(!mContinuousFocus);
+            return true;
         }
-
+        else if (item == mItemFocus) {
+            mForceFocus = true;
+            return true;
+        }
         return true;
     }
 
@@ -165,6 +204,34 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
     }
 
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        if (! didSetCameraParemeters) {
+            Camera c = CameraCalibrator.getCamera((JavaCameraView) mOpenCvCameraView);
+            if (c != null) {
+                Camera.Parameters p = c.getParameters();
+                if (p != null) {
+                    p.setFocusMode(mContinuousFocus ? Camera.Parameters.FOCUS_MODE_CONTINUOUS_VIDEO : Camera.Parameters.FOCUS_MODE_AUTO);
+                    c.setParameters(p);
+                    didSetCameraParemeters = true;
+                }
+            }
+        }
+        if (mForceFocus) {
+            Camera c = CameraCalibrator.getCamera((JavaCameraView) mOpenCvCameraView);
+            if (c != null) {
+                Camera.Parameters p = c.getParameters();
+                if (p != null) {
+                    p.setFocusMode(Camera.Parameters.FOCUS_MODE_AUTO);
+                    c.setParameters(p);
+                    mForceFocus = false;
+                    c.autoFocus(new Camera.AutoFocusCallback() {
+                        @Override
+                        public void onAutoFocus(boolean b, Camera camera) {
+                        }
+                    });
+                }
+            }
+        }
+
         CalibrationResult.tryLoad(this, mCameraMatrix, mDistortionCoefficients, (JavaCameraView)mOpenCvCameraView, inputFrame.rgba().size());
         Mat renderedFrame = new Mat();
         if (Core.countNonZero(mDistortionCoefficients) > 0) {
@@ -174,7 +241,7 @@ public class MarkerDetectionActivity extends CameraActivity implements SensorEve
         else {
             renderedFrame = inputFrame.rgba();
         }
-        return mQRDetector.handleFrame(renderedFrame,mCameraMatrix,gravity,mVertical,mFiltered);
+        return mQRDetector.handleFrame(renderedFrame,mCameraMatrix,gravity,mVertical,mFiltered,mSubPixel);
     }
 
     @Override

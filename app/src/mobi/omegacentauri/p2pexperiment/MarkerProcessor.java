@@ -1,5 +1,6 @@
 package mobi.omegacentauri.p2pexperiment;
 
+import org.opencv.calib3d.Calib3d;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.MatOfInt;
@@ -7,6 +8,8 @@ import org.opencv.core.Range;
 import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Point;
+import org.opencv.core.Size;
+import org.opencv.core.TermCriteria;
 import org.opencv.imgproc.Imgproc;
 import org.opencv.objdetect.ArucoDetector;
 import org.opencv.objdetect.DetectorParameters;
@@ -19,7 +22,6 @@ public class MarkerProcessor {
     private static final String TAG = "QRProcessor";
     private Scalar SourceColor = new Scalar(0, 255, 0);
     private Scalar DestColor = new Scalar(255, 0, 0);
-    private Scalar FontColor = new Scalar(0, 0, 255);
 
     public MarkerProcessor(boolean useArucoDetector) {
         detector = new ArucoDetector();
@@ -53,7 +55,7 @@ public class MarkerProcessor {
 
     /* this method to be called from the outside. It processes the frame to find QR codes. */
     public synchronized Mat handleFrame(Mat inputFrame, Mat cameraMatrix, double[] gravity,
-                                        Boolean verticalMode, Boolean myColorFilter) {
+                                        Boolean verticalMode, Boolean myColorFilter, Boolean subPixel) {
         List<Mat> corners = new ArrayList<Mat>();
         Mat ids = new Mat();
 
@@ -63,16 +65,17 @@ public class MarkerProcessor {
             double blackPoint = .4;
             double whitePoint = .7;
             Core.addWeighted(inputFrame, 1 / (whitePoint - blackPoint), inputFrame, 0, -blackPoint * 255 / (whitePoint - blackPoint), inputFrame);
+        }
+
+        if (subPixel || myColorFilter) {
             filtered = new Mat();
             Imgproc.cvtColor(inputFrame, filtered, Imgproc.COLOR_RGBA2GRAY, 1);
         }
         else {
             filtered = inputFrame;
         }
-        boolean result = findQRs(filtered, corners, ids);
-        if (myColorFilter)
-            filtered.release();
 
+        boolean result = findQRs(filtered, corners, ids);
         if (result) {
             renderQRs(inputFrame, corners, ids);
 
@@ -83,13 +86,13 @@ public class MarkerProcessor {
                 Mat marker4 = null;
                 for (int i = 0; i < corners.size(); i++) {
                     if (ids.get(i, 0)[0] == 1)
-                        marker1 = corners.get(i);
+                        marker1 = refine(filtered,corners.get(i),subPixel);
                     else if (ids.get(i, 0)[0] == 2)
-                        marker2 = corners.get(i);
+                        marker2 = refine(filtered,corners.get(i),subPixel);
                     else if (ids.get(i, 0)[0] == 3)
-                        marker3 = corners.get(i);
+                        marker3 = refine(filtered,corners.get(i),subPixel);
                     else if (ids.get(i, 0)[0] == 4)
-                        marker4 = corners.get(i);
+                        marker4 = refine(filtered,corners.get(i),subPixel);
                 }
                 if (marker1 != null && marker2 != null) {
                     P2PExperiment experiment = new P2PExperiment(cameraMatrix, marker1, marker2, marker3, marker4, gravity, verticalMode);
@@ -107,10 +110,10 @@ public class MarkerProcessor {
                     else {
                         rotatedFrame = inputFrame;
                     }
-                    Mat darken = new Mat(rotatedFrame, new Rect(0,0,900,150));
+                    Mat darken = new Mat(rotatedFrame, new Rect(0,0,1000,150));
                     Core.multiply(darken, new Scalar(0.5,0.5,0.5), darken);
                     darken.release();
-                    String s = String.format("P2PA: %.1f,%.1f,%.1f",
+                    String s = String.format("P2PA %.0f,%.0f,%.0f",
                             experiment.cameraPosition.get(0,0)[0],
                             experiment.cameraPosition.get(1,0)[0],
                             experiment.cameraPosition.get(2,0)[0]
@@ -118,10 +121,11 @@ public class MarkerProcessor {
                     Imgproc.putText(rotatedFrame,s,new Point(5,60),
                             0,2,SourceColor, 2);
                     if (experiment.cameraPositionP16P != null) {
-                        s = String.format("P16P: %.1f,%.1f,%.1f",
+                        s = String.format("P16P %.0f,%.0f,%.0f e %.1f",
                                 experiment.cameraPositionP16P.get(0, 0)[0],
                                 experiment.cameraPositionP16P.get(1, 0)[0],
-                                experiment.cameraPositionP16P.get(2, 0)[0]
+                                experiment.cameraPositionP16P.get(2, 0)[0],
+                                experiment.error
                         );
                         Imgproc.putText(rotatedFrame, s, new Point(5, 120),
                                 0, 2, SourceColor, 2);
@@ -133,10 +137,24 @@ public class MarkerProcessor {
                 }
             }
         }
+
+        if (filtered != inputFrame)
+            filtered.release();
+
         for (Mat c : corners)
             c.release();
         ids.release();
         return inputFrame;
+    }
+
+    private Mat refine(Mat img, Mat corners, boolean subPixel) {
+        if (!subPixel)
+            return corners;
+
+        final TermCriteria criteria = new TermCriteria(TermCriteria.EPS + TermCriteria.COUNT, 30, 0.1);
+
+        Imgproc.cornerSubPix(img, corners, new Size(11,11), new Size(-1,-1),criteria);
+        return corners;
     }
 
     private static int getRotation(double[] gravity) {
